@@ -245,7 +245,8 @@ function Snap-Window {
 function Start-TerminalWindow {
     param(
         [string]$Title,
-        [string]$WorkingDir
+        [string]$WorkingDir,
+        [int]$WindowNum
     )
 
     # Short name from window title for popup labels (e.g. "[DEV] Repos" -> "Repos")
@@ -257,11 +258,12 @@ function Start-TerminalWindow {
     # Build wt.exe command as a single string to avoid PowerShell array quoting issues.
     # Tab 1: brv (ByteRover CLI) in pwsh
     # Tabs 2-4: Claude Code via launcher (handles env cleanup + notification setup)
+    # WindowNum is passed so launcher can resolve the correct HWND from DevLayout
     $wtArgs = "-w new" +
         " --title `"$Title`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -Command brv" +
-        " ; new-tab --title `"Claude 1`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 2 '$shortName / Claude 1'`"" +
-        " ; new-tab --title `"Claude 2`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 3 '$shortName / Claude 2'`"" +
-        " ; new-tab --title `"Claude 3`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 4 '$shortName / Claude 3'`""
+        " ; new-tab --title `"Claude 1`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 2 '$shortName / Claude 1' $WindowNum`"" +
+        " ; new-tab --title `"Claude 2`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 3 '$shortName / Claude 2' $WindowNum`"" +
+        " ; new-tab --title `"Claude 3`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 4 '$shortName / Claude 3' $WindowNum`""
 
     $wtPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\wt.exe"
     Start-Process $wtPath -ArgumentList $wtArgs
@@ -270,6 +272,17 @@ function Start-TerminalWindow {
 # ============================================================================
 # MAIN
 # ============================================================================
+
+function Find-NewWTWindow {
+    param([System.Collections.Generic.List[IntPtr]]$ExistingWindows, [IntPtr[]]$KnownNew)
+    $allWT = [WinApi]::FindWindowsByProcess("WindowsTerminal")
+    foreach ($hwnd in $allWT) {
+        if ($ExistingWindows -notcontains $hwnd -and $KnownNew -notcontains $hwnd) {
+            return $hwnd
+        }
+    }
+    return [IntPtr]::Zero
+}
 
 function Invoke-DevLayout {
     Write-Host "DevLayout: Setting up development environment..." -ForegroundColor Cyan
@@ -282,52 +295,69 @@ function Invoke-DevLayout {
         Write-Warning "Single monitor detected. Using primary monitor."
     }
 
+    $notifyDir = Join-Path $env:USERPROFILE ".claude\hooks\claude-notify"
+
+    # Clean stale DevLayout HWND files
+    Remove-Item (Join-Path $notifyDir ".devlayout-hwnd-*") -ErrorAction SilentlyContinue
+
     # Snapshot existing WT windows before launching
     $existingWTWindows = [WinApi]::FindWindowsByProcess("WindowsTerminal")
 
-    # Launch both windows
+    # Launch Window 1 and wait for its HWND
     Write-Host "  Launching: $($Config.Window1.Title)" -ForegroundColor Yellow
-    Start-TerminalWindow -Title $Config.Window1.Title -WorkingDir $Config.Window1.WorkingDir
+    Start-TerminalWindow -Title $Config.Window1.Title -WorkingDir $Config.Window1.WorkingDir -WindowNum 1
 
-    Start-Sleep -Milliseconds 500
-
-    Write-Host "  Launching: $($Config.Window2.Title)" -ForegroundColor Yellow
-    Start-TerminalWindow -Title $Config.Window2.Title -WorkingDir $Config.Window2.WorkingDir
-
-    # Wait for windows to appear
-    Write-Host "  Waiting for windows to launch..." -ForegroundColor Gray
-    Start-Sleep -Milliseconds $Config.LaunchDelayMs
-
-    # Find NEW WT windows (ones that didn't exist before)
-    $allWTWindows = [WinApi]::FindWindowsByProcess("WindowsTerminal")
-    $newWindows = @()
-    foreach ($hwnd in $allWTWindows) {
-        if ($existingWTWindows -notcontains $hwnd) {
-            $newWindows += $hwnd
-        }
+    Write-Host "  Waiting for window 1..." -ForegroundColor Gray
+    $w1Handle = [IntPtr]::Zero
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Milliseconds 200
+        $w1Handle = Find-NewWTWindow -ExistingWindows $existingWTWindows -KnownNew @()
+        if ($w1Handle -ne [IntPtr]::Zero) { break }
     }
 
-    Write-Host "  Found $($newWindows.Count) new window(s)" -ForegroundColor Gray
-
-    # Snap new windows: first one right, second one left
-    Write-Host "  Snapping windows to monitor $($monitorIndex + 1)..." -ForegroundColor Cyan
-
-    if ($newWindows.Count -ge 1) {
-        Snap-Window -Handle $newWindows[0] -Position "Right" -MonitorBounds $targetMonitor
-        $title = [WinApi]::GetWindowTitle($newWindows[0])
-        Write-Host "    $title -> RIGHT" -ForegroundColor Gray
+    if ($w1Handle -ne [IntPtr]::Zero) {
+        # Write HWND file so Window 1's tabs can pick it up
+        Set-Content (Join-Path $notifyDir ".devlayout-hwnd-1") $w1Handle.ToInt64()
+        Write-Host "    Window 1 HWND: $($w1Handle.ToInt64())" -ForegroundColor Gray
     } else {
         Write-Host "    Window 1 -> NOT FOUND" -ForegroundColor Red
     }
 
-    Start-Sleep -Milliseconds $Config.SnapDelayMs
+    # Launch Window 2 and wait for its HWND
+    Write-Host "  Launching: $($Config.Window2.Title)" -ForegroundColor Yellow
+    Start-TerminalWindow -Title $Config.Window2.Title -WorkingDir $Config.Window2.WorkingDir -WindowNum 2
 
-    if ($newWindows.Count -ge 2) {
-        Snap-Window -Handle $newWindows[1] -Position "Left" -MonitorBounds $targetMonitor
-        $title = [WinApi]::GetWindowTitle($newWindows[1])
-        Write-Host "    $title -> LEFT" -ForegroundColor Gray
+    Write-Host "  Waiting for window 2..." -ForegroundColor Gray
+    $w2Handle = [IntPtr]::Zero
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Milliseconds 200
+        $w2Handle = Find-NewWTWindow -ExistingWindows $existingWTWindows -KnownNew @($w1Handle)
+        if ($w2Handle -ne [IntPtr]::Zero) { break }
+    }
+
+    if ($w2Handle -ne [IntPtr]::Zero) {
+        # Write HWND file so Window 2's tabs can pick it up
+        Set-Content (Join-Path $notifyDir ".devlayout-hwnd-2") $w2Handle.ToInt64()
+        Write-Host "    Window 2 HWND: $($w2Handle.ToInt64())" -ForegroundColor Gray
     } else {
         Write-Host "    Window 2 -> NOT FOUND" -ForegroundColor Red
+    }
+
+    # Snap windows: Window 1 (Repos) left, Window 2 (Repos2) right
+    Write-Host "  Snapping windows to monitor $($monitorIndex + 1)..." -ForegroundColor Cyan
+
+    if ($w1Handle -ne [IntPtr]::Zero) {
+        Snap-Window -Handle $w1Handle -Position "Left" -MonitorBounds $targetMonitor
+        $title = [WinApi]::GetWindowTitle($w1Handle)
+        Write-Host "    $title -> LEFT" -ForegroundColor Gray
+    }
+
+    Start-Sleep -Milliseconds $Config.SnapDelayMs
+
+    if ($w2Handle -ne [IntPtr]::Zero) {
+        Snap-Window -Handle $w2Handle -Position "Right" -MonitorBounds $targetMonitor
+        $title = [WinApi]::GetWindowTitle($w2Handle)
+        Write-Host "    $title -> RIGHT" -ForegroundColor Gray
     }
 
     Write-Host "DevLayout: Complete!" -ForegroundColor Green
