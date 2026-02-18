@@ -49,11 +49,11 @@ Edit the `$Config` block at the top of `DevLayout.ps1`:
 $Config = @{
     Window1 = @{
         Title      = "[DEV] Repos"
-        WorkingDir = "C:\Users\YourName\repos"
+        WorkingDir = "$env:USERPROFILE\repos"
     }
     Window2 = @{
         Title      = "[DEV] Repos2"
-        WorkingDir = "C:\Users\YourName\Repos2"
+        WorkingDir = "$env:USERPROFILE\Repos2"
     }
     TargetMonitor = 1    # 0 = left monitor, 1 = right monitor
     LaunchDelayMs = 2000 # Wait time for windows to spawn

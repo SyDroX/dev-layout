@@ -19,11 +19,11 @@
 $Config = @{
     Window1 = @{
         Title      = "[DEV] Repos"
-        WorkingDir = "C:\Users\KonstantynSydoruk\repos"
+        WorkingDir = "$env:USERPROFILE\repos"
     }
     Window2 = @{
         Title      = "[DEV] Repos2"
-        WorkingDir = "C:\Users\KonstantynSydoruk\Repos2"
+        WorkingDir = "$env:USERPROFILE\Repos2"
     }
     # Which monitor to use (0 = first/left, 1 = second/right)
     TargetMonitor = 1
