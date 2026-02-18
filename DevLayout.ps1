@@ -210,8 +210,8 @@ function Start-TerminalWindow {
 
     # Build wt.exe command: 4 tabs
     # Tab 1: brv (ByteRover CLI)
-    # Tabs 2-4: Claude Code with --dangerously-skip-permissions
-    $escapedDir = $WorkingDir -replace "'", "''"
+    # Tabs 2-4: claude-notify setup (with tab index override) then Claude Code
+    $setupScript = "%USERPROFILE%/.claude/hooks/claude-notify/setup.sh"
 
     # wt.exe uses ; to separate commands, escaped as \; in PowerShell
     $args = @(
@@ -223,17 +223,17 @@ function Start-TerminalWindow {
         "new-tab",
         "--title", "`"Claude 1`"",
         "-d", "`"$WorkingDir`"",
-        "cmd.exe", "/c", "claude --dangerously-skip-permissions",
+        "cmd.exe", "/c", "`"bash $setupScript 2 & claude --dangerously-skip-permissions`"",
         "`;"
         "new-tab",
         "--title", "`"Claude 2`"",
         "-d", "`"$WorkingDir`"",
-        "cmd.exe", "/c", "claude --dangerously-skip-permissions",
+        "cmd.exe", "/c", "`"bash $setupScript 3 & claude --dangerously-skip-permissions`"",
         "`;"
         "new-tab",
         "--title", "`"Claude 3`"",
         "-d", "`"$WorkingDir`"",
-        "cmd.exe", "/c", "claude --dangerously-skip-permissions"
+        "cmd.exe", "/c", "`"bash $setupScript 4 & claude --dangerously-skip-permissions`""
     )
 
     Start-Process "wt.exe" -ArgumentList $args
