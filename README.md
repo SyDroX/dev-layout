@@ -6,7 +6,7 @@ Opens two Windows Terminal windows on your second monitor, each with 4 tabs:
 
 | Window | Position | Tab 1 | Tabs 2-4 |
 |--------|----------|-------|----------|
-| Repos  | Left half  | [ByteRover](https://byterover.com) CLI (`brv`) | Claude Code |
+| Repos  | Left half  | [ByteRover](https://byterover.dev) CLI (`brv`) | Claude Code |
 | Repos2 | Right half | ByteRover CLI (`brv`) | Claude Code |
 
 All Claude Code tabs launch with `--dangerously-skip-permissions` for uninterrupted autonomous work.
@@ -19,7 +19,7 @@ Re-running the script when windows already exist snaps them back into position w
 - [Windows Terminal](https://github.com/microsoft/terminal) with `wt.exe` on PATH
 - [PowerShell 7+](https://github.com/PowerShell/PowerShell) (`pwsh.exe`)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- [ByteRover](https://byterover.com) CLI (`brv`)
+- [ByteRover](https://byterover.dev) CLI (`brv`)
 
 ## Usage
 
