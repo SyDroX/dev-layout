@@ -13,6 +13,22 @@
 #>
 
 # ============================================================================
+# ENVIRONMENT
+# ============================================================================
+
+# Resolve pwsh.exe full path (wt.exe is a UWP app and won't inherit PATH changes)
+$registryPath = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                [Environment]::GetEnvironmentVariable("Path", "User") + ";" + $env:Path
+$PwshExe = ($registryPath.Split(';') |
+    Where-Object { $_ -and (Test-Path (Join-Path $_ "pwsh.exe") -ErrorAction SilentlyContinue) } |
+    Select-Object -First 1 |
+    ForEach-Object { Join-Path $_ "pwsh.exe" })
+if (-not $PwshExe) {
+    Write-Error "pwsh.exe not found. Install PowerShell 7: winget install Microsoft.PowerShell"
+    return
+}
+
+# ============================================================================
 # CONFIGURATION
 # ============================================================================
 
@@ -25,8 +41,8 @@ $Config = @{
         Title      = "[DEV] Repos2"
         WorkingDir = "$env:USERPROFILE\Repos2"
     }
-    # Which monitor to use (0 = first/left, 1 = second/right)
-    TargetMonitor = 1
+    # Which monitor to use (0 = leftmost, 1 = next, etc.)
+    TargetMonitor = 0
     # Delays in milliseconds
     LaunchDelayMs = 2000
     SnapDelayMs   = 150
@@ -141,6 +157,30 @@ public class WinApi
         return windows;
     }
 
+    public static List<IntPtr> FindWindowsByProcess(string processName)
+    {
+        List<IntPtr> windows = new List<IntPtr>();
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            if (!IsWindowVisible(hWnd)) return true;
+            uint pid;
+            GetWindowThreadProcessId(hWnd, out pid);
+            try
+            {
+                var proc = System.Diagnostics.Process.GetProcessById((int)pid);
+                if (proc.ProcessName == processName)
+                {
+                    string title = GetWindowTitle(hWnd);
+                    if (!string.IsNullOrEmpty(title) && title != "PopupHost")
+                        windows.Add(hWnd);
+                }
+            }
+            catch {}
+            return true;
+        }, IntPtr.Zero);
+        return windows;
+    }
+
     public static void SendWinKey(byte arrowKey)
     {
         keybd_event(VK_LWIN, 0, 0, UIntPtr.Zero);
@@ -208,38 +248,23 @@ function Start-TerminalWindow {
         [string]$WorkingDir
     )
 
-    # Build wt.exe command: 4 tabs
-    # Tab 1: brv (ByteRover CLI)
-    # Tabs 2-4: claude-notify setup (with tab index + label) then Claude Code
-    $setupScript = "%USERPROFILE%/.claude/hooks/claude-notify/setup.sh"
-
     # Short name from window title for popup labels (e.g. "[DEV] Repos" -> "Repos")
     $shortName = $Title -replace '^\[.*?\]\s*', ''
 
-    # wt.exe uses ; to separate commands, escaped as \; in PowerShell
-    $args = @(
-        "-w", "new",
-        "--title", "`"$Title`"",
-        "-d", "`"$WorkingDir`"",
-        "pwsh.exe", "-NoExit", "-Command", "`"& { `$Host.UI.RawUI.WindowTitle = '$Title'; brv }`"",
-        "`;"
-        "new-tab",
-        "--title", "`"Claude 1`"",
-        "-d", "`"$WorkingDir`"",
-        "cmd.exe", "/c", "`"bash $setupScript 2 `"$shortName / Claude 1`" & claude --dangerously-skip-permissions`"",
-        "`;"
-        "new-tab",
-        "--title", "`"Claude 2`"",
-        "-d", "`"$WorkingDir`"",
-        "cmd.exe", "/c", "`"bash $setupScript 3 `"$shortName / Claude 2`" & claude --dangerously-skip-permissions`"",
-        "`;"
-        "new-tab",
-        "--title", "`"Claude 3`"",
-        "-d", "`"$WorkingDir`"",
-        "cmd.exe", "/c", "`"bash $setupScript 4 `"$shortName / Claude 3`" & claude --dangerously-skip-permissions`""
-    )
+    # Launcher script clears CLAUDECODE env var, runs claude-notify setup, then Claude Code
+    $launcher = Join-Path $PSScriptRoot "launch-claude.ps1"
 
-    Start-Process "wt.exe" -ArgumentList $args
+    # Build wt.exe command as a single string to avoid PowerShell array quoting issues.
+    # Tab 1: brv (ByteRover CLI) in pwsh
+    # Tabs 2-4: Claude Code via launcher (handles env cleanup + notification setup)
+    $wtArgs = "-w new" +
+        " --title `"$Title`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -Command brv" +
+        " ; new-tab --title `"Claude 1`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 2 '$shortName / Claude 1'`"" +
+        " ; new-tab --title `"Claude 2`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 3 '$shortName / Claude 2'`"" +
+        " ; new-tab --title `"Claude 3`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 4 '$shortName / Claude 3'`""
+
+    $wtPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\wt.exe"
+    Start-Process $wtPath -ArgumentList $wtArgs
 }
 
 # ============================================================================
@@ -257,74 +282,52 @@ function Invoke-DevLayout {
         Write-Warning "Single monitor detected. Using primary monitor."
     }
 
-    # Check for existing windows
-    $w1Handle = [IntPtr]::Zero
-    $w2Handle = [IntPtr]::Zero
+    # Snapshot existing WT windows before launching
+    $existingWTWindows = [WinApi]::FindWindowsByProcess("WindowsTerminal")
 
-    $w1Windows = [WinApi]::FindWindowsByTitle($Config.Window1.Title)
-    if ($w1Windows.Count -gt 0) { $w1Handle = $w1Windows[0] }
-
-    $w2Windows = [WinApi]::FindWindowsByTitle($Config.Window2.Title)
-    if ($w2Windows.Count -gt 0) { $w2Handle = $w2Windows[0] }
-
-    # If both exist, just focus and snap them
-    if ($w1Handle -ne [IntPtr]::Zero -and $w2Handle -ne [IntPtr]::Zero) {
-        Write-Host "  Both windows found - snapping to position" -ForegroundColor Green
-        Snap-Window -Handle $w1Handle -Position "Left" -MonitorBounds $targetMonitor
-        Start-Sleep -Milliseconds $Config.SnapDelayMs
-        Snap-Window -Handle $w2Handle -Position "Right" -MonitorBounds $targetMonitor
-        Write-Host "DevLayout: Complete! (snap only)" -ForegroundColor Green
-        return
-    }
-
-    # Launch missing windows
-    if ($w1Handle -eq [IntPtr]::Zero) {
-        Write-Host "  Launching: $($Config.Window1.Title)" -ForegroundColor Yellow
-        Start-TerminalWindow -Title $Config.Window1.Title -WorkingDir $Config.Window1.WorkingDir
-    } else {
-        Write-Host "  Found: $($Config.Window1.Title)" -ForegroundColor Green
-    }
+    # Launch both windows
+    Write-Host "  Launching: $($Config.Window1.Title)" -ForegroundColor Yellow
+    Start-TerminalWindow -Title $Config.Window1.Title -WorkingDir $Config.Window1.WorkingDir
 
     Start-Sleep -Milliseconds 500
 
-    if ($w2Handle -eq [IntPtr]::Zero) {
-        Write-Host "  Launching: $($Config.Window2.Title)" -ForegroundColor Yellow
-        Start-TerminalWindow -Title $Config.Window2.Title -WorkingDir $Config.Window2.WorkingDir
-    } else {
-        Write-Host "  Found: $($Config.Window2.Title)" -ForegroundColor Green
-    }
+    Write-Host "  Launching: $($Config.Window2.Title)" -ForegroundColor Yellow
+    Start-TerminalWindow -Title $Config.Window2.Title -WorkingDir $Config.Window2.WorkingDir
 
     # Wait for windows to appear
     Write-Host "  Waiting for windows to launch..." -ForegroundColor Gray
     Start-Sleep -Milliseconds $Config.LaunchDelayMs
 
-    # Re-find windows
-    if ($w1Handle -eq [IntPtr]::Zero) {
-        $w1Windows = [WinApi]::FindWindowsByTitle($Config.Window1.Title)
-        if ($w1Windows.Count -gt 0) { $w1Handle = $w1Windows[0] }
-    }
-    if ($w2Handle -eq [IntPtr]::Zero) {
-        $w2Windows = [WinApi]::FindWindowsByTitle($Config.Window2.Title)
-        if ($w2Windows.Count -gt 0) { $w2Handle = $w2Windows[0] }
+    # Find NEW WT windows (ones that didn't exist before)
+    $allWTWindows = [WinApi]::FindWindowsByProcess("WindowsTerminal")
+    $newWindows = @()
+    foreach ($hwnd in $allWTWindows) {
+        if ($existingWTWindows -notcontains $hwnd) {
+            $newWindows += $hwnd
+        }
     }
 
-    # Snap to monitor
+    Write-Host "  Found $($newWindows.Count) new window(s)" -ForegroundColor Gray
+
+    # Snap new windows: first one right, second one left
     Write-Host "  Snapping windows to monitor $($monitorIndex + 1)..." -ForegroundColor Cyan
 
-    if ($w1Handle -ne [IntPtr]::Zero) {
-        Snap-Window -Handle $w1Handle -Position "Left" -MonitorBounds $targetMonitor
-        Write-Host "    $($Config.Window1.Title) -> LEFT" -ForegroundColor Gray
+    if ($newWindows.Count -ge 1) {
+        Snap-Window -Handle $newWindows[0] -Position "Right" -MonitorBounds $targetMonitor
+        $title = [WinApi]::GetWindowTitle($newWindows[0])
+        Write-Host "    $title -> RIGHT" -ForegroundColor Gray
     } else {
-        Write-Host "    $($Config.Window1.Title) -> NOT FOUND (launch may have been slow)" -ForegroundColor Red
+        Write-Host "    Window 1 -> NOT FOUND" -ForegroundColor Red
     }
 
     Start-Sleep -Milliseconds $Config.SnapDelayMs
 
-    if ($w2Handle -ne [IntPtr]::Zero) {
-        Snap-Window -Handle $w2Handle -Position "Right" -MonitorBounds $targetMonitor
-        Write-Host "    $($Config.Window2.Title) -> RIGHT" -ForegroundColor Gray
+    if ($newWindows.Count -ge 2) {
+        Snap-Window -Handle $newWindows[1] -Position "Left" -MonitorBounds $targetMonitor
+        $title = [WinApi]::GetWindowTitle($newWindows[1])
+        Write-Host "    $title -> LEFT" -ForegroundColor Gray
     } else {
-        Write-Host "    $($Config.Window2.Title) -> NOT FOUND (launch may have been slow)" -ForegroundColor Red
+        Write-Host "    Window 2 -> NOT FOUND" -ForegroundColor Red
     }
 
     Write-Host "DevLayout: Complete!" -ForegroundColor Green
