@@ -260,7 +260,7 @@ function Start-TerminalWindow {
     # Tabs 2-4: Claude Code via launcher (handles env cleanup + notification setup)
     # WindowNum is passed so launcher can resolve the correct HWND from DevLayout
     $wtArgs = "-w new" +
-        " --title `"$Title`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -Command `"`$Host.UI.RawUI.WindowTitle = '$Title'; brv`"" +
+        " --title `"$Title`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -Command `"`$Host.UI.RawUI.WindowTitle = '$Title'\; brv`"" +
         " ; new-tab --title `"Claude 1`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 2 '$shortName / Claude 1' $WindowNum`"" +
         " ; new-tab --title `"Claude 2`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 3 '$shortName / Claude 2' $WindowNum`"" +
         " ; new-tab --title `"Claude 3`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 4 '$shortName / Claude 3' $WindowNum`""

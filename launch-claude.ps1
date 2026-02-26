@@ -25,9 +25,9 @@ if ($windowNum) {
 
 # Run claude-notify setup with tab index, label, and HWND override
 if ($tabIndex -and $label -and $hwnd) {
-    & bash "$env:USERPROFILE/.claude/hooks/claude-notify/setup.sh" $tabIndex $label $hwnd
+    & "C:\Program Files\Git\usr\bin\bash.exe" "$env:USERPROFILE/.claude/hooks/claude-notify/setup.sh" $tabIndex $label $hwnd
 } elseif ($tabIndex -and $label) {
-    & bash "$env:USERPROFILE/.claude/hooks/claude-notify/setup.sh" $tabIndex $label
+    & "C:\Program Files\Git\usr\bin\bash.exe" "$env:USERPROFILE/.claude/hooks/claude-notify/setup.sh" $tabIndex $label
 }
 
 # Launch Claude Code
