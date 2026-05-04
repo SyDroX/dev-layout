@@ -3,14 +3,20 @@
 .SYNOPSIS
     Opens two Windows Terminal windows on the second monitor, each with 4 tabs.
 .DESCRIPTION
-    Left window  (repos):  Tab 1 = brv, Tabs 2-4 = Claude Code
-    Right window (repos2): Tab 1 = brv, Tabs 2-4 = Claude Code
+    Left window  (repos):  Tabs 1-4 = Claude Code
+    Right window (repos2): Tabs 1-4 = Claude Code
 
     All Claude Code tabs launch with --dangerously-skip-permissions.
     Uses Windows native snap (Win+Arrow) for resolution-independent positioning.
+.PARAMETER Model
+    Claude model id passed to `claude --model`. Defaults to claude-opus-4-6[1m] (Opus 4.6 with 1M context).
 .NOTES
     Hotkey: Ctrl+Alt+D (via Setup-DevLayoutShortcut.ps1)
 #>
+
+param(
+    [string]$Model = "claude-opus-4-6[1m]"
+)
 
 # ============================================================================
 # ENVIRONMENT
@@ -256,14 +262,14 @@ function Start-TerminalWindow {
     $launcher = Join-Path $PSScriptRoot "launch-claude.ps1"
 
     # Build wt.exe command as a single string to avoid PowerShell array quoting issues.
-    # Tab 1: brv (ByteRover CLI) in pwsh
-    # Tabs 2-4: Claude Code via launcher (handles env cleanup + notification setup)
+    # Tabs 1-4: Claude Code via launcher (handles env cleanup + notification setup)
     # WindowNum is passed so launcher can resolve the correct HWND from DevLayout
+    # $Model passed as 4th launcher arg -> claude --model
     $wtArgs = "-w new" +
-        " --title `"$Title`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -Command `"`$Host.UI.RawUI.WindowTitle = '$Title'\; brv`"" +
-        " ; new-tab --title `"Claude 1`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 2 '$shortName / Claude 1' $WindowNum`"" +
-        " ; new-tab --title `"Claude 2`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 3 '$shortName / Claude 2' $WindowNum`"" +
-        " ; new-tab --title `"Claude 3`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 4 '$shortName / Claude 3' $WindowNum`""
+        " --title `"Claude 1`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 1 '$shortName / Claude 1' $WindowNum '$Model'`"" +
+        " ; new-tab --title `"Claude 2`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 2 '$shortName / Claude 2' $WindowNum '$Model'`"" +
+        " ; new-tab --title `"Claude 3`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 3 '$shortName / Claude 3' $WindowNum '$Model'`"" +
+        " ; new-tab --title `"Claude 4`" -d `"$WorkingDir`" `"$PwshExe`" -NoExit -ExecutionPolicy Bypass -Command `"& '$launcher' 4 '$shortName / Claude 4' $WindowNum '$Model'`""
 
     $wtPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\wt.exe"
     Start-Process $wtPath -ArgumentList $wtArgs
