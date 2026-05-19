@@ -48,34 +48,42 @@ if (Test-Path $stateFile) {
     }
 }
 
-# Snapshot existing sessions so we can detect the one Claude creates this run.
-$beforeIds = @{}
-if (Test-Path $projectPath) {
-    Get-ChildItem (Join-Path $projectPath '*.jsonl') -ErrorAction SilentlyContinue | ForEach-Object {
-        $beforeIds[[System.IO.Path]::GetFileNameWithoutExtension($_.Name)] = $true
+# For new sessions: snapshot existing jsonls, spawn a background poller to capture the new
+# session id within seconds of Claude starting. The poller runs as a hidden process so it
+# survives even if the WT tab is killed (try/finally won't run on tab close).
+if (-not $resumeId) {
+    $beforeList = ""
+    if (Test-Path $projectPath) {
+        $beforeList = (Get-ChildItem (Join-Path $projectPath '*.jsonl') -ErrorAction SilentlyContinue |
+                       ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_.Name) }) -join ','
+    }
+    $startIso = (Get-Date).ToString('o')
+
+    $pollerPath = Join-Path $env:TEMP "devlayout-poller-w$windowNum-t$tabIndex.ps1"
+    @"
+`$projectPath = '$projectPath'
+`$stateFile = '$stateFile'
+`$startTime = [DateTime]'$startIso'
+`$before = @{}
+'$beforeList'.Split(',') | Where-Object { `$_ } | ForEach-Object { `$before[`$_] = `$true }
+for (`$i = 0; `$i -lt 30; `$i++) {
+    Start-Sleep -Seconds 2
+    `$files = Get-ChildItem (Join-Path `$projectPath '*.jsonl') -ErrorAction SilentlyContinue |
+             Where-Object { -not `$before[[System.IO.Path]::GetFileNameWithoutExtension(`$_.Name)] -and `$_.CreationTime -ge `$startTime }
+    if (`$files) {
+        `$newest = `$files | Sort-Object CreationTime | Select-Object -First 1
+        Set-Content `$stateFile ([System.IO.Path]::GetFileNameWithoutExtension(`$newest.Name))
+        break
     }
 }
-$startTime = Get-Date
+Remove-Item '$pollerPath' -ErrorAction SilentlyContinue
+"@ | Set-Content $pollerPath
 
-try {
-    if ($resumeId) {
-        & claude --dangerously-skip-permissions --model $model --resume $resumeId
-    } else {
-        & claude --dangerously-skip-permissions --model $model
-    }
-} finally {
-    # On new-session run, find the jsonl Claude just created and save its id for next launch.
-    # On resume, the same jsonl is reused so the existing state file is still correct.
-    if (-not $resumeId -and (Test-Path $projectPath)) {
-        $newest = Get-ChildItem (Join-Path $projectPath '*.jsonl') -ErrorAction SilentlyContinue |
-                  Where-Object {
-                      -not $beforeIds[[System.IO.Path]::GetFileNameWithoutExtension($_.Name)] -and
-                      $_.CreationTime -ge $startTime
-                  } |
-                  Sort-Object LastWriteTime -Descending |
-                  Select-Object -First 1
-        if ($newest) {
-            Set-Content $stateFile ([System.IO.Path]::GetFileNameWithoutExtension($newest.Name))
-        }
-    }
+    Start-Process pwsh -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", $pollerPath -WindowStyle Hidden
+}
+
+if ($resumeId) {
+    & claude --dangerously-skip-permissions --model $model --resume $resumeId
+} else {
+    & claude --dangerously-skip-permissions --model $model
 }
