@@ -32,23 +32,44 @@ if ($tabIndex -and $label -and $hwnd) {
     & "C:\Program Files\Git\usr\bin\bash.exe" "$env:USERPROFILE/.claude/hooks/claude-notify/setup.sh" $tabIndex $label
 }
 
-# Session resume: deterministic UUID per (window, tab) slot.
-# Same slot always maps to the same session ID - no pollers or race conditions.
+# Session resume: deterministic UUID per (window, tab) slot as baseline,
+# with state file override to persist manual /resume switches.
 $slotKey = "devlayout-w$windowNum-t$tabIndex"
 $md5 = [System.Security.Cryptography.MD5]::Create()
 $hash = $md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($slotKey))
 $hash[6] = ($hash[6] -band 0x0F) -bor 0x30
 $hash[8] = ($hash[8] -band 0x3F) -bor 0x80
-$sessionId = ([guid]::new($hash)).ToString()
+$defaultSessionId = ([guid]::new($hash)).ToString()
 
-# Resolve project dir the same way Claude Code does (actual filesystem case)
 $cwd = (Get-Location).Path
 $projectDir = $cwd -replace '[:\\]', '-'
 $projectPath = Join-Path $env:USERPROFILE ".claude\projects\$projectDir"
-$sessionFile = Join-Path $projectPath "$sessionId.jsonl"
 
-if (Test-Path $sessionFile) {
-    & claude --dangerously-skip-permissions --model $model --resume $sessionId
+# State file captures whatever session was active on last exit (including manual /resume)
+$stateFile = Join-Path $notifyDir ".devlayout-session-w$windowNum-t$tabIndex"
+$resumeId = $null
+if (Test-Path $stateFile) {
+    $candidate = (Get-Content $stateFile -Raw -ErrorAction SilentlyContinue).Trim()
+    if ($candidate -and (Test-Path (Join-Path $projectPath "$candidate.jsonl"))) {
+        $resumeId = $candidate
+    }
+}
+
+# Priority: state file > deterministic UUID > new session
+if ($resumeId) {
+    & claude --dangerously-skip-permissions --model $model --resume $resumeId
+} elseif (Test-Path (Join-Path $projectPath "$defaultSessionId.jsonl")) {
+    & claude --dangerously-skip-permissions --model $model --resume $defaultSessionId
 } else {
-    & claude --dangerously-skip-permissions --model $model --session-id $sessionId
+    & claude --dangerously-skip-permissions --model $model --session-id $defaultSessionId
+}
+
+# After claude exits (normal exit / Ctrl+C), capture active session for next launch.
+# On tab force-close this won't run — next launch falls back to deterministic UUID.
+if (Test-Path $projectPath) {
+    $latest = Get-ChildItem (Join-Path $projectPath '*.jsonl') -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($latest) {
+        Set-Content $stateFile ([System.IO.Path]::GetFileNameWithoutExtension($latest.Name))
+    }
 }
