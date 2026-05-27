@@ -1,6 +1,6 @@
 # dev-layout
 
-One-click development workspace setup for Windows Terminal.
+Multi-repo Claude Code workspace launcher for Windows Terminal.
 
 ![DevLayout demo](https://github.com/user-attachments/assets/7873ef4d-c73b-42a6-9720-6af570691389)
 
