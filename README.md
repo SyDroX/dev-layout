@@ -15,22 +15,36 @@ All tabs launch with `--dangerously-skip-permissions` and a configurable model (
 
 Each tab automatically resumes its previous conversation on relaunch.
 
+## Why
+
+Claude Code runs in a single directory. When your project spans multiple repos (app, backend, dashboard, plugins, bridges), you need Claude in a **parent directory** that contains all of them. From there, Claude uses absolute paths and `git -C <path>` to operate across repos without ever changing the working directory.
+
+DevLayout automates this setup: 8 Claude Code tabs across 2 workspace roots, all pre-configured with session persistence and a `cd`-blocking hook that prevents Claude from breaking out of the multi-repo pattern.
+
+### The cd problem
+
+If Claude runs `cd my-backend` to work on the backend, it loses access to the app repo. Every subsequent command runs in the wrong directory. The `block-bare-cd.sh` hook prevents this by blocking `cd`, `chdir`, `Set-Location`, and equivalents at the PreToolUse level, forcing absolute paths instead.
+
 ## Requirements
 
 - Windows 10/11
 - [Windows Terminal](https://github.com/microsoft/terminal) with `wt.exe` on PATH
 - [PowerShell 7+](https://github.com/PowerShell/PowerShell) (`pwsh.exe`)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- Python 3 (for the cd-blocking hook)
 
 ## Setup
 
-### 1. Install session resume hook
+### 1. Install hooks
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File Setup-SessionHook.ps1
 ```
 
-Copies `hooks/devlayout-session-save.ps1` to `~/.claude/hooks/` and registers a `SessionStart` hook in Claude Code settings. This captures the active session ID whenever Claude starts or the user runs `/resume`.
+Installs two hooks:
+
+- **Session resume** (`~/.claude/hooks/devlayout-session-save.ps1`) -- SessionStart hook that captures the active session ID whenever Claude starts or the user runs `/resume`, so tabs restore their conversation on relaunch.
+- **CD blocker** (`<workspace>/.claude/hooks/block-bare-cd.sh`) -- PreToolUse hook that blocks `cd`, `chdir`, `Set-Location`, etc. in Bash and PowerShell tool calls, forcing Claude to use absolute paths and `git -C` for multi-repo work.
 
 ### 2. Set up Ctrl+Alt+D hotkey (optional)
 
@@ -92,6 +106,10 @@ When the user manually switches conversations with `/resume` inside Claude, a `S
 
 This survives force-close and OS restart -- the hook captures the session ID at start time, not exit time.
 
+### CD blocking
+
+The `block-bare-cd.sh` hook intercepts every Bash and PowerShell tool call via PreToolUse. It splits the command on `;`, `&&`, `||`, `|`, and newlines, then checks the first token of each segment against a banned list: `cd`, `chdir`, `set-location`, `push-location`, `pop-location`, `sl`. If matched, the command is blocked with exit code 2 and Claude is told to use absolute paths or `git -C` instead.
+
 ## Files
 
 | File | Purpose |
@@ -100,6 +118,7 @@ This survives force-close and OS restart -- the hook captures the session ID at 
 | `DevLayout.bat` | Thin wrapper for taskbar/shortcut |
 | `launch-claude.ps1` | Per-tab launcher (env, notifications, session resume) |
 | `hooks/devlayout-session-save.ps1` | SessionStart hook (captures session ID) |
+| `hooks/block-bare-cd.sh` | PreToolUse hook (blocks cd commands) |
 | `Setup-SessionHook.ps1` | One-time hook installation |
 | `Setup-DevLayoutShortcut.ps1` | Ctrl+Alt+D hotkey setup |
 
