@@ -55,6 +55,10 @@ if (Test-Path $stateFile) {
     }
 }
 
+# Expose slot identity so SessionStart hook can persist session ID on /resume
+$env:DEVLAYOUT_WINDOW = $windowNum
+$env:DEVLAYOUT_TAB = $tabIndex
+
 # Priority: state file > deterministic UUID > new session
 if ($resumeId) {
     & claude --dangerously-skip-permissions --model $model --resume $resumeId
@@ -62,14 +66,4 @@ if ($resumeId) {
     & claude --dangerously-skip-permissions --model $model --resume $defaultSessionId
 } else {
     & claude --dangerously-skip-permissions --model $model --session-id $defaultSessionId
-}
-
-# After claude exits (normal exit / Ctrl+C), capture active session for next launch.
-# On tab force-close this won't run — next launch falls back to deterministic UUID.
-if (Test-Path $projectPath) {
-    $latest = Get-ChildItem (Join-Path $projectPath '*.jsonl') -ErrorAction SilentlyContinue |
-              Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($latest) {
-        Set-Content $stateFile ([System.IO.Path]::GetFileNameWithoutExtension($latest.Name))
-    }
 }
