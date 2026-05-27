@@ -23,7 +23,7 @@ DevLayout automates this setup: 8 Claude Code tabs across 2 workspace roots, all
 
 ### The cd problem
 
-If Claude runs `cd my-backend` to work on the backend, it loses access to the app repo. Every subsequent command runs in the wrong directory. The `block-bare-cd.sh` hook prevents this by blocking `cd`, `chdir`, `Set-Location`, and equivalents at the PreToolUse level, forcing absolute paths instead.
+If Claude runs `cd my-backend` to work on the backend, it loses access to the other repos. Every subsequent command runs in the wrong directory. The `block-bare-cd.sh` hook prevents this by blocking `cd`, `chdir`, `Set-Location`, and equivalents at the PreToolUse level, forcing absolute paths instead.
 
 ## Requirements
 
