@@ -2,7 +2,7 @@
 
 One-click development workspace setup for Windows Terminal.
 
-https://github.com/SyDroX/dev-layout/releases/download/v1.0/dev-layout-showcase.mp4
+https://github.com/user-attachments/assets/894c016f-f147-4fdc-b12a-e66109d6a3b6
 
 Opens two Windows Terminal windows on your second monitor, each with 4 Claude Code tabs:
 
