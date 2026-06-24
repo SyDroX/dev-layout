@@ -60,10 +60,11 @@ $env:DEVLAYOUT_WINDOW = $windowNum
 $env:DEVLAYOUT_TAB = $tabIndex
 
 # Priority: state file > deterministic UUID > new session
+# Resume without --model so session keeps its original model (avoids context re-read)
 if ($resumeId) {
-    & claude --dangerously-skip-permissions --model $model --resume $resumeId
+    & claude --dangerously-skip-permissions --resume $resumeId
 } elseif (Test-Path (Join-Path $projectPath "$defaultSessionId.jsonl")) {
-    & claude --dangerously-skip-permissions --model $model --resume $defaultSessionId
+    & claude --dangerously-skip-permissions --resume $defaultSessionId
 } else {
     & claude --dangerously-skip-permissions --model $model --session-id $defaultSessionId
 }
