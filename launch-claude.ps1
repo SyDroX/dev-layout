@@ -59,12 +59,22 @@ if (Test-Path $stateFile) {
 $env:DEVLAYOUT_WINDOW = $windowNum
 $env:DEVLAYOUT_TAB = $tabIndex
 
+# Resolve model for resume: stored model (from SessionStart hook) with [1m], else DevLayout default
+$modelFile = Join-Path $notifyDir ".devlayout-model-w$windowNum-t$tabIndex"
+$resumeModel = $model
+if (Test-Path $modelFile) {
+    $stored = (Get-Content $modelFile -Raw -ErrorAction SilentlyContinue).Trim()
+    if ($stored) {
+        $base = $stored -replace '\[.*\]$', ''
+        $resumeModel = "$base[1m]"
+    }
+}
+
 # Priority: state file > deterministic UUID > new session
-# Resume without --model so session keeps its original model (avoids context re-read)
 if ($resumeId) {
-    & claude --dangerously-skip-permissions --resume $resumeId
+    & claude --dangerously-skip-permissions --model $resumeModel --resume $resumeId
 } elseif (Test-Path (Join-Path $projectPath "$defaultSessionId.jsonl")) {
-    & claude --dangerously-skip-permissions --resume $defaultSessionId
+    & claude --dangerously-skip-permissions --model $resumeModel --resume $defaultSessionId
 } else {
     & claude --dangerously-skip-permissions --model $model --session-id $defaultSessionId
 }
