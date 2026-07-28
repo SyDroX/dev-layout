@@ -9,13 +9,13 @@
     All Claude Code tabs launch with --dangerously-skip-permissions.
     Uses Windows native snap (Win+Arrow) for resolution-independent positioning.
 .PARAMETER Model
-    Claude model id passed to `claude --model`. Defaults to claude-opus-4-6[1m] (Opus 4.6 with 1M context).
+    Claude model id passed to `claude --model`. Defaults to claude-fable-5[1m] (Fable 5 with 1M context).
 .NOTES
     Hotkey: Ctrl+Alt+D (via Setup-DevLayoutShortcut.ps1)
 #>
 
 param(
-    [string]$Model = "claude-opus-4-6[1m]"
+    [string]$Model = "claude-fable-5[1m]"
 )
 
 # ============================================================================

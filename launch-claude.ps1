@@ -8,7 +8,7 @@ $tabIndex = $args[0]
 $label = $args[1]
 $windowNum = $args[2]
 $model = $args[3]
-if (-not $model) { $model = "claude-opus-4-6[1m]" }
+if (-not $model) { $model = "claude-fable-5[1m]" }
 
 $notifyDir = Join-Path $env:USERPROFILE ".claude\hooks\claude-notify"
 $hwnd = $null

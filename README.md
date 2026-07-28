@@ -11,19 +11,24 @@ Opens two Windows Terminal windows on your second monitor, each with 4 Claude Co
 | Repos  | Left half  | Claude Code |
 | Repos2 | Right half | Claude Code |
 
-All tabs launch with `--dangerously-skip-permissions` and a configurable model (default: `claude-opus-4-6[1m]`).
+All tabs launch with `--dangerously-skip-permissions` and a configurable model (default: `claude-fable-5[1m]`).
 
 Each tab automatically resumes its previous conversation on relaunch.
 
 ## Why
 
-Claude Code runs in a single directory. When your project spans multiple repos (app, backend, dashboard, plugins, bridges), you need Claude in a **parent directory** that contains all of them. From there, Claude uses absolute paths and `git -C <path>` to operate across repos without ever changing the working directory.
+Claude Code runs in a single directory. When your project spans multiple repos (app, backend, dashboard, plugins, bridges), you need Claude in a 
+**parent directory** that contains all of them. From there, Claude uses absolute paths and `git -C <path>` to operate across repos without ever 
+changing the working directory.
 
-DevLayout automates this setup: 8 Claude Code tabs across 2 workspace roots, all pre-configured with session persistence and a `cd`-blocking hook that prevents Claude from breaking out of the multi-repo pattern.
+DevLayout automates this setup: 8 Claude Code tabs across 2 workspace roots, all pre-configured with session persistence and a `cd`-blocking hook 
+that prevents Claude from breaking out of the multi-repo pattern.
 
 ### The cd problem
 
-If Claude runs `cd my-backend` to work on the backend, it loses access to the other repos. Every subsequent command runs in the wrong directory. The `block-bare-cd.sh` hook prevents this by blocking `cd`, `chdir`, `Set-Location`, and equivalents at the PreToolUse level, forcing absolute paths instead.
+If Claude runs `cd my-backend` to work on the backend, it loses access to the other repos. Every subsequent command runs in the wrong directory. The 
+`block-bare-cd.sh` hook prevents this by blocking `cd`, `chdir`, `Set-Location`, and equivalents at the PreToolUse level, forcing absolute paths 
+instead.
 
 ## Requirements
 
@@ -43,8 +48,10 @@ powershell -ExecutionPolicy Bypass -File Setup-SessionHook.ps1
 
 Installs two hooks:
 
-- **Session resume** (`~/.claude/hooks/devlayout-session-save.ps1`) -- SessionStart hook that captures the active session ID whenever Claude starts or the user runs `/resume`, so tabs restore their conversation on relaunch.
-- **CD blocker** (`<workspace>/.claude/hooks/block-bare-cd.sh`) -- PreToolUse hook that blocks `cd`, `chdir`, `Set-Location`, etc. in Bash and PowerShell tool calls, forcing Claude to use absolute paths and `git -C` for multi-repo work.
+- **Session resume** (`~/.claude/hooks/devlayout-session-save.ps1`) -- SessionStart hook that captures the active session ID whenever Claude starts 
+or the user runs `/resume`, so tabs restore their conversation on relaunch.
+- **CD blocker** (`<workspace>/.claude/hooks/block-bare-cd.sh`) -- PreToolUse hook that blocks `cd`, `chdir`, `Set-Location`, etc. in Bash and 
+PowerShell tool calls, forcing Claude to use absolute paths and `git -C` for multi-repo work.
 
 ### 2. Set up Ctrl+Alt+D hotkey (optional)
 
@@ -59,11 +66,11 @@ Right-click `DevLayout.bat` and select "Pin to taskbar".
 ## Usage
 
 ```powershell
-# Default model (Opus 4.6, 1M context)
+# Default model (Fable 5, 1M context)
 powershell -ExecutionPolicy Bypass -File DevLayout.ps1
 
 # Override model
-powershell -ExecutionPolicy Bypass -File DevLayout.ps1 -Model claude-opus-4-7
+powershell -ExecutionPolicy Bypass -File DevLayout.ps1 -Model claude-opus-4-8
 ```
 
 Or press **Ctrl+Alt+D** if you set up the hotkey.
@@ -98,9 +105,11 @@ $Config = @{
 
 ### Session resume
 
-Each (window, tab) slot gets a deterministic UUID derived from its position (e.g. `w1-t3`). This UUID is used as the Claude session ID via `--session-id` on first launch and `--resume` on subsequent launches.
+Each (window, tab) slot gets a deterministic UUID derived from its position (e.g. `w1-t3`). This UUID is used as the Claude session ID via 
+`--session-id` on first launch and `--resume` on subsequent launches.
 
-When the user manually switches conversations with `/resume` inside Claude, a `SessionStart` hook fires and saves the new session ID to a state file. On next relaunch, the state file takes priority over the deterministic UUID.
+When the user manually switches conversations with `/resume` inside Claude, a `SessionStart` hook fires and saves the new session ID to a state file. 
+On next relaunch, the state file takes priority over the deterministic UUID.
 
 **Priority order:** state file (manual /resume) > deterministic UUID > new session
 
@@ -108,7 +117,9 @@ This survives force-close and OS restart -- the hook captures the session ID at 
 
 ### CD blocking
 
-The `block-bare-cd.sh` hook intercepts every Bash and PowerShell tool call via PreToolUse. It splits the command on `;`, `&&`, `||`, `|`, and newlines, then checks the first token of each segment against a banned list: `cd`, `chdir`, `set-location`, `push-location`, `pop-location`, `sl`. If matched, the command is blocked with exit code 2 and Claude is told to use absolute paths or `git -C` instead.
+The `block-bare-cd.sh` hook intercepts every Bash and PowerShell tool call via PreToolUse. It splits the command on `;`, `&&`, `||`, `|`, and 
+newlines, then checks the first token of each segment against a banned list: `cd`, `chdir`, `set-location`, `push-location`, `pop-location`, `sl`. If 
+matched, the command is blocked with exit code 2 and Claude is told to use absolute paths or `git -C` instead.
 
 ## Files
 
