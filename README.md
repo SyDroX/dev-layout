@@ -46,16 +46,12 @@ instead.
 powershell -ExecutionPolicy Bypass -File Setup-SessionHook.ps1
 ```
 
-Installs four hooks:
+Installs two hooks:
 
 - **Session resume** (`~/.claude/hooks/devlayout-session-save.ps1`) -- SessionStart hook that captures the active session ID whenever Claude starts 
 or the user runs `/resume`, so tabs restore their conversation on relaunch.
 - **CD blocker** (`<workspace>/.claude/hooks/block-bare-cd.sh`) -- PreToolUse hook that blocks `cd`, `chdir`, `Set-Location`, etc. in Bash and 
 PowerShell tool calls, forcing Claude to use absolute paths and `git -C` for multi-repo work.
-- **Tab title sync** (`~/.claude/hooks/sync-tab-title.py`) -- UserPromptSubmit hook that mirrors the Claude session name (set by `/rename` or 
-written externally to the session file) into the Windows Terminal tab title via an OSC 2 escape sequence.
-- **Tab title clear** (`~/.claude/hooks/clear-tab-title.py`) -- SessionStart hook scoped to `/clear` that blanks the tab title and keeps it blank 
-until the session is renamed again.
 
 ### 2. Set up Ctrl+Alt+D hotkey (optional)
 
@@ -125,23 +121,6 @@ The `block-bare-cd.sh` hook intercepts every Bash and PowerShell tool call via P
 newlines, then checks the first token of each segment against a banned list: `cd`, `chdir`, `set-location`, `push-location`, `pop-location`, `sl`. If 
 matched, the command is blocked with exit code 2 and Claude is told to use absolute paths or `git -C` instead.
 
-### Tab title sync
-
-Claude Code stores the session name (set via `/rename`) as `custom-title` records in the session transcript 
-(`~/.claude/projects/<project>/<session-id>.jsonl`, last record wins). The running CLI never re-reads that file, and Windows Terminal knows nothing 
-about it -- so the two hooks bridge the gap:
-
-- `sync-tab-title.py` runs on every UserPromptSubmit, reads the latest `custom-title` from the transcript, and emits it as an OSC 2 escape sequence 
-via the hook `terminalSequence` output field (Claude Code v2.1.141+). Windows Terminal picks it up as the tab title.
-- `clear-tab-title.py` runs on SessionStart with matcher `clear` (fires only on `/clear`). It blanks the tab title and writes the pre-clear title to 
-a marker file (`~/.claude/hooks/state/tab-cleared-<session-id>.txt`). While the stored title still equals the marker, the sync hook keeps the tab 
-blank; the first new rename supersedes the marker and normal syncing resumes.
-
-Because the sync hook reads the transcript file, renames made from outside the running session also propagate -- e.g. the Agent SDK's 
-`rename_session()` appends a `custom-title` record, and the tab picks it up on the next prompt. This enables automation like renaming a session 
-after a ticket ID mentioned in the conversation. The in-app header title only updates via a manual `/rename`; there is no programmatic way to 
-refresh it mid-session.
-
 ## Files
 
 | File | Purpose |
@@ -151,8 +130,6 @@ refresh it mid-session.
 | `launch-claude.ps1` | Per-tab launcher (env, notifications, session resume) |
 | `hooks/devlayout-session-save.ps1` | SessionStart hook (captures session ID) |
 | `hooks/block-bare-cd.sh` | PreToolUse hook (blocks cd commands) |
-| `hooks/sync-tab-title.py` | UserPromptSubmit hook (session name to WT tab title) |
-| `hooks/clear-tab-title.py` | SessionStart:clear hook (blanks tab title on /clear) |
 | `Setup-SessionHook.ps1` | One-time hook installation |
 | `Setup-DevLayoutShortcut.ps1` | Ctrl+Alt+D hotkey setup |
 

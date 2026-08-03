@@ -4,16 +4,10 @@ Windows Terminal workspace launcher. Opens 2 WT windows on the second monitor, e
 
 ## Architecture
 
-- `DevLayout.ps1` - Main script. Launches WT windows via `wt.exe` with multi-tab arguments, then snaps them using Win32 `keybd_event` (Win+Arrow 
-simulation).
+- `DevLayout.ps1` - Main script. Launches WT windows via `wt.exe` with multi-tab arguments, then snaps them using Win32 `keybd_event` (Win+Arrow simulation).
 - `launch-claude.ps1` - Per-tab launcher. Clears inherited `CLAUDECODE` env var, runs claude-notify setup, handles session resume logic.
 - `hooks/devlayout-session-save.ps1` - SessionStart hook. Captures session ID on start and `/resume`, writes to state file keyed by (window, tab).
-- `hooks/sync-tab-title.py` - UserPromptSubmit hook. Reads last `custom-title` record from the session transcript, emits OSC 2 via `terminalSequence` 
-so the WT tab shows the session name. Honors the clear-marker (stays blank until a new rename).
-- `hooks/clear-tab-title.py` - SessionStart hook, matcher `clear`. Blanks the WT tab title on `/clear` and saves the pre-clear title to 
-`~/.claude/hooks/state/tab-cleared-<session-id>.txt` so sync only resumes after a NEW rename.
-- `Setup-SessionHook.ps1` - Copies hook scripts to `~/.claude/hooks/` and registers SessionStart/UserPromptSubmit entries in 
-`~/.claude/settings.json`.
+- `Setup-SessionHook.ps1` - Copies hook script to `~/.claude/hooks/` and registers SessionStart entry in `~/.claude/settings.json`.
 - `Setup-DevLayoutShortcut.ps1` - Creates Start Menu shortcut with Ctrl+Alt+D hotkey.
 - `DevLayout.bat` - Thin wrapper for taskbar pinning and shortcut hotkey.
 
