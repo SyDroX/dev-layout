@@ -187,5 +187,76 @@ foreach ($ws in $workspaces) {
     Install-CdHook -WorkspaceDir $ws
 }
 
+# ============================================================================
+# 3. TAB TITLE HOOKS (global — ~/.claude/)
+# ============================================================================
+
+function Register-GlobalHook {
+    param(
+        [hashtable]$Settings,
+        [string]$EventName,
+        [hashtable]$Entry,
+        [string]$Marker
+    )
+    if (-not $Settings['hooks'].ContainsKey($EventName)) {
+        $Settings['hooks'][$EventName] = @()
+    }
+    foreach ($e in $Settings['hooks'][$EventName]) {
+        foreach ($h in $e.hooks) {
+            if ($h.command -and $h.command -like "*$Marker*") {
+                Write-Host "  $EventName hook already registered ($Marker), skipping" -ForegroundColor Yellow
+                return
+            }
+        }
+    }
+    $Settings['hooks'][$EventName] = @($Settings['hooks'][$EventName]) + @($Entry)
+    Write-Host "  $EventName hook registered ($Marker)" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "Installing tab title hooks..." -ForegroundColor Cyan
+
+foreach ($name in @("sync-tab-title.py", "clear-tab-title.py")) {
+    $src = Join-Path $ScriptDir "hooks\$name"
+    if (-not (Test-Path $src)) {
+        Write-Error "Hook script not found: $src"
+        exit 1
+    }
+    Copy-Item $src (Join-Path $hooksDir $name) -Force
+    Write-Host "Tab title hook installed: $(Join-Path $hooksDir $name)" -ForegroundColor Green
+}
+
+$settings = Get-Content $GlobalSettings -Raw | ConvertFrom-Json -AsHashtable
+if (-not $settings.ContainsKey('hooks')) {
+    $settings['hooks'] = @{}
+}
+
+$syncCommand = "py $((Join-Path $hooksDir 'sync-tab-title.py') -replace '\\','/')"
+$clearCommand = "py $((Join-Path $hooksDir 'clear-tab-title.py') -replace '\\','/')"
+
+Register-GlobalHook -Settings $settings -EventName 'UserPromptSubmit' -Marker 'sync-tab-title' -Entry @{
+    hooks = @(
+        @{
+            type    = "command"
+            command = $syncCommand
+            timeout = 5
+        }
+    )
+}
+
+# matcher "clear" scopes the hook to SessionStart fired by /clear (not startup/resume/compact)
+Register-GlobalHook -Settings $settings -EventName 'SessionStart' -Marker 'clear-tab-title' -Entry @{
+    matcher = "clear"
+    hooks = @(
+        @{
+            type    = "command"
+            command = $clearCommand
+            timeout = 5
+        }
+    )
+}
+
+$settings | ConvertTo-Json -Depth 10 | Set-Content $GlobalSettings -Encoding UTF8
+
 Write-Host ""
 Write-Host "Setup complete." -ForegroundColor Green
